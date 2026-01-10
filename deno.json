@@ -1,0 +1,14 @@
+{
+  "tasks": {
+    "dev": "deno run --watch main.ts"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1",
+    "@babel/parser": "npm:@babel/parser",
+    "@babel/traverse": "npm:@babel/traverse"
+  },
+  "compilerOptions": {
+    "types": ["npm:@types/babel-traverse"],
+    "lib": ["deno.ns", "dom"]
+  }
+}
