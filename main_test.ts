@@ -1,5 +1,16 @@
 import { assertEquals } from "@std/assert";
-import { analyzeRender, createHtmlFactory, generateScript } from "./main.ts";
+import {
+  analyzeRender,
+  createHtmlFactory,
+  generateScript,
+  isSafeHtml,
+  SafeHtml,
+} from "./main.ts";
+
+// Helper to get string content from render result
+function getContent(result: string | SafeHtml): string {
+  return isSafeHtml(result) ? result.content : result;
+}
 
 Deno.test("analyzeRender - detects signal reads", () => {
   class Counter {
@@ -126,7 +137,7 @@ Deno.test("createHtmlFactory - renders static content", () => {
   const instance = new Static();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<div>hello</div>"), true);
 });
@@ -135,7 +146,6 @@ Deno.test("createHtmlFactory - renders reactive content with data-zid", () => {
   class Counter {
     count = 5;
     render({ html }: any) {
-      // Need an event that WRITES for it to be reactive
       return html`<button onclick=${() => this.count++}>${this.count}</button>`;
     }
   }
@@ -143,7 +153,7 @@ Deno.test("createHtmlFactory - renders reactive content with data-zid", () => {
   const instance = new Counter();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("data-zid="), true);
   assertEquals(result.includes(">5<"), true);
@@ -160,7 +170,7 @@ Deno.test("createHtmlFactory - renders event handlers", () => {
   const instance = new Counter();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("data-zid="), true);
   assertEquals(result.includes("<script>"), true);
@@ -183,7 +193,7 @@ Deno.test("createHtmlFactory - child components render", () => {
   const instance = new Parent();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<span>child</span>"), true);
 });
@@ -267,7 +277,7 @@ Deno.test("createHtmlFactory - child component with props", () => {
   const instance = new Parent();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes(">42<"), true);
 });
@@ -294,7 +304,7 @@ Deno.test("createHtmlFactory - multiple children", () => {
   const instance = new List();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<li>a</li>"), true);
   assertEquals(result.includes("<li>b</li>"), true);
@@ -322,7 +332,7 @@ Deno.test("createHtmlFactory - deeply nested components", () => {
   const instance = new Outer();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(
     result.includes("<section><div><span>inner</span></div></section>"),
@@ -347,7 +357,7 @@ Deno.test("createHtmlFactory - mixed static and reactive children", () => {
   const instance = new Parent();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("static text"), true);
   assertEquals(result.includes(">5<"), true);
@@ -368,12 +378,11 @@ Deno.test("createHtmlFactory - sibling reactive elements", () => {
   const instance = new Multi();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes(">1<"), true);
   assertEquals(result.includes(">2<"), true);
 
-  // Only count in HTML, not in script
   const htmlOnly = result.split("<script>")[0];
   assertEquals((htmlOnly.match(/data-zid/g) || []).length, 2);
 });
@@ -388,7 +397,7 @@ Deno.test("createHtmlFactory - no script tag for static content", () => {
   const instance = new Static();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<script>"), false);
 });
@@ -403,7 +412,7 @@ Deno.test("createHtmlFactory - handles null/undefined values", () => {
   const instance = new Nullable();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<div>"), true);
 });
@@ -418,7 +427,7 @@ Deno.test("createHtmlFactory - handles number values", () => {
   const instance = new Numbers();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("42"), true);
   assertEquals(result.includes("3.14"), true);
@@ -434,10 +443,10 @@ Deno.test("createHtmlFactory - handles boolean values", () => {
   const instance = new Booleans();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("true"), true);
-  assertEquals(result.includes("false"), true);
+  assertEquals(result.includes("false"), false);
 });
 
 Deno.test("generateScript - multiple signals in update function", () => {
@@ -483,9 +492,8 @@ Deno.test("createHtmlFactory - same element with event and reactive text", () =>
   const instance = new Button();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
-  // Only count in HTML, not in script
   const htmlOnly = result.split("<script>")[0];
   assertEquals((htmlOnly.match(/data-zid/g) || []).length, 1);
 });
@@ -514,7 +522,7 @@ Deno.test("createHtmlFactory - array map rendering", () => {
   const instance = new List();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<li>a</li>"), true);
   assertEquals(result.includes("<li>b</li>"), true);
@@ -532,7 +540,7 @@ Deno.test("createHtmlFactory - conditional rendering with && (true)", () => {
   const instance = new Conditional();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<span>visible</span>"), true);
 });
@@ -548,10 +556,10 @@ Deno.test("createHtmlFactory - conditional rendering with && (false)", () => {
   const instance = new Conditional();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<span>visible</span>"), false);
-  assertEquals(result.includes("false"), false); // shouldn't render "false"
+  assertEquals(result.includes("false"), false);
 });
 
 Deno.test("createHtmlFactory - conditional rendering with ternary", () => {
@@ -567,7 +575,7 @@ Deno.test("createHtmlFactory - conditional rendering with ternary", () => {
   const instance = new Conditional();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("Welcome"), true);
   assertEquals(result.includes("Login"), false);
@@ -586,7 +594,7 @@ Deno.test("createHtmlFactory - conditional rendering with ternary (else branch)"
   const instance = new Conditional();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("Welcome"), false);
   assertEquals(result.includes("Login"), true);
@@ -609,7 +617,7 @@ Deno.test("createHtmlFactory - conditional with component", () => {
   const instance = new Page();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("Modal content"), true);
 });
@@ -631,7 +639,7 @@ Deno.test("createHtmlFactory - conditional with component (hidden)", () => {
   const instance = new Page();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("Modal content"), false);
 });
@@ -650,7 +658,7 @@ Deno.test("createHtmlFactory - reactive conditional toggle", () => {
   const instance = new Toggle();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("<span>Content</span>"), true);
   assertEquals(result.includes("onclick"), true);
@@ -667,7 +675,7 @@ Deno.test("createHtmlFactory - null/undefined conditionals", () => {
   const instance = new Maybe();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("Anonymous"), true);
 });
@@ -683,36 +691,335 @@ Deno.test("createHtmlFactory - null/undefined conditionals with value", () => {
   const instance = new Maybe();
   const ctx = { req: new Request("http://localhost/") };
   const html = createHtmlFactory(instance, ctx);
-  const result = instance.render({ html, ...ctx });
+  const result = getContent(instance.render({ html, ...ctx }));
 
   assertEquals(result.includes("Claude"), true);
   assertEquals(result.includes("Anonymous"), false);
 });
 
-Deno.test("DEBUG - conditionals", () => {
-  class ConditionalTrue {
-    show = true;
+Deno.test("createHtmlFactory - static class attribute", () => {
+  class Styled {
     render({ html }: any) {
-      return html`<div>${this.show && html`<span>visible</span>`}</div>`;
+      return html`<div class=${"container"}>content</div>`;
     }
   }
 
-  class ConditionalFalse {
-    show = false;
-    render({ html }: any) {
-      return html`<div>${this.show && html`<span>visible</span>`}</div>`;
-    }
-  }
-
+  const instance = new Styled();
   const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
 
-  const trueInstance = new ConditionalTrue();
-  const trueHtml = createHtmlFactory(trueInstance, ctx);
-  const trueResult = trueInstance.render({ html: trueHtml, ...ctx });
-  console.log("TRUE RESULT:", trueResult);
+  assertEquals(result.includes('class="container"'), true);
+});
 
-  const falseInstance = new ConditionalFalse();
-  const falseHtml = createHtmlFactory(falseInstance, ctx);
-  const falseResult = falseInstance.render({ html: falseHtml, ...ctx });
-  console.log("FALSE RESULT:", falseResult);
+Deno.test("createHtmlFactory - dynamic class attribute", () => {
+  class Toggle {
+    active = true;
+    render({ html }: any) {
+      return html`<div class=${this.active ? "on" : "off"}>content</div>`;
+    }
+  }
+
+  const instance = new Toggle();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes('class="on"'), true);
+});
+
+Deno.test("createHtmlFactory - reactive class attribute", () => {
+  class Toggle {
+    active = true;
+    render({ html }: any) {
+      return html`<button onclick=${() => this.active = !this.active} class=${
+        this.active ? "on" : "off"
+      }>toggle</button>`;
+    }
+  }
+
+  const instance = new Toggle();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes('class="on"'), true);
+  assertEquals(result.includes("<script>"), true);
+});
+
+Deno.test("createHtmlFactory - boolean attribute true", () => {
+  class Input {
+    render({ html }: any) {
+      return html`<input disabled=${true}>`;
+    }
+  }
+
+  const instance = new Input();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes("disabled"), true);
+});
+
+Deno.test("createHtmlFactory - boolean attribute false", () => {
+  class Input {
+    render({ html }: any) {
+      return html`<input disabled=${false}>`;
+    }
+  }
+
+  const instance = new Input();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes("disabled"), false);
+});
+
+Deno.test("createHtmlFactory - href attribute", () => {
+  class Link {
+    url = "https://example.com";
+    render({ html }: any) {
+      return html`<a href=${this.url}>link</a>`;
+    }
+  }
+
+  const instance = new Link();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes('href="https://example.com"'), true);
+});
+
+Deno.test("createHtmlFactory - multiple attributes", () => {
+  class Element {
+    render({ html }: any) {
+      return html`<div id=${"myId"} class=${"myClass"} data-value=${"123"}>content</div>`;
+    }
+  }
+
+  const instance = new Element();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes('id="myId"'), true);
+  assertEquals(result.includes('class="myClass"'), true);
+  assertEquals(result.includes('data-value="123"'), true);
+});
+
+Deno.test("createHtmlFactory - multiple events on same element", () => {
+  class Interactive {
+    count = 0;
+    hovered = false;
+    render({ html }: any) {
+      return html`<button 
+        onclick=${() => this.count++} 
+        onmouseenter=${() => this.hovered = true}
+      >hover me</button>`;
+    }
+  }
+
+  const instance = new Interactive();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  const htmlOnly = result.split("<script>")[0];
+  assertEquals((htmlOnly.match(/data-zid/g) || []).length, 1);
+
+  assertEquals(result.includes(".onclick"), true);
+  assertEquals(result.includes(".onmouseenter"), true);
+});
+
+Deno.test("createHtmlFactory - request context", () => {
+  class Page {
+    render({ html, req }: any) {
+      return html`<div>${req.url}</div>`;
+    }
+  }
+
+  const instance = new Page();
+  const ctx = { req: new Request("http://localhost/test") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes("http://localhost/test"), true);
+});
+
+Deno.test("createHtmlFactory - empty template", () => {
+  class Empty {
+    render({ html }: any) {
+      return html``;
+    }
+  }
+
+  const instance = new Empty();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result, "");
+});
+
+Deno.test("createHtmlFactory - self-closing tags", () => {
+  class Form {
+    value = "";
+    render({ html }: any) {
+      return html`<input type="text" value=${this.value} />`;
+    }
+  }
+
+  const instance = new Form();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes('type="text"'), true);
+  assertEquals(result.includes('value=""'), true);
+});
+
+Deno.test("createHtmlFactory - special characters escaped in text", () => {
+  class Escaped {
+    render({ html }: any) {
+      return html`<div>${"<script>alert('xss')</script>"}</div>`;
+    }
+  }
+
+  const instance = new Escaped();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes("<script>alert"), false);
+  assertEquals(result.includes("&lt;script&gt;"), true);
+});
+
+Deno.test("createHtmlFactory - style object", () => {
+  class Styled {
+    render({ html }: any) {
+      const styles = { color: "red", fontSize: "16px" };
+      const styleStr = Object.entries(styles)
+        .map(([k, v]) =>
+          `${k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())}: ${v}`
+        )
+        .join("; ");
+      return html`<div style=${styleStr}>styled</div>`;
+    }
+  }
+
+  const instance = new Styled();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes('style="color: red; font-size: 16px"'), true);
+});
+
+Deno.test("analyzeRender - detects async .then() pattern", () => {
+  class Async {
+    getData() {
+      return Promise.resolve([1, 2, 3]);
+    }
+    render({ html }: any) {
+      return html`<div>${
+        this.getData().then((d) => html`<span>${d}</span>`)
+      }</div>`;
+    }
+  }
+
+  const analysis = analyzeRender(Async.prototype.render);
+
+  assertEquals(analysis.length, 1);
+  assertEquals(analysis[0].isAsync, true);
+  assertEquals(analysis[0].promiseSource?.includes("getData"), true);
+  assertEquals(analysis[0].thenCallback !== null, true);
+});
+
+Deno.test("analyzeRender - detects async .then().catch() pattern", () => {
+  class Async {
+    getData() {
+      return Promise.resolve([1, 2, 3]);
+    }
+    render({ html }: any) {
+      return html`<div>${
+        this.getData()
+          .then((d) => html`<span>${d}</span>`)
+          .catch((e) => html`<span>Error</span>`)
+      }</div>`;
+    }
+  }
+
+  const analysis = analyzeRender(Async.prototype.render);
+
+  assertEquals(analysis.length, 1);
+  assertEquals(analysis[0].isAsync, true);
+  assertEquals(analysis[0].catchCallback !== null, true);
+});
+
+Deno.test("createHtmlFactory - async renders placeholder", () => {
+  class Async {
+    getData() {
+      return Promise.resolve("data");
+    }
+    render({ html }: any) {
+      return html`<div>${
+        this.getData().then((d) => html`<span>${d}</span>`)
+      }</div>`;
+    }
+  }
+
+  const instance = new Async();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  // Should have a placeholder element
+  assertEquals(result.includes("data-zid="), true);
+  // Should have script
+  assertEquals(result.includes("<script>"), true);
+  // Should have .then in script
+  assertEquals(result.includes(".then"), true);
+});
+
+Deno.test("createHtmlFactory - async with catch renders placeholder", () => {
+  class Async {
+    getData() {
+      return Promise.resolve("data");
+    }
+    render({ html }: any) {
+      return html`<div>${
+        this.getData()
+          .then((d) => html`<span>${d}</span>`)
+          .catch((e) => html`<span>Error</span>`)
+      }</div>`;
+    }
+  }
+
+  const instance = new Async();
+  const ctx = { req: new Request("http://localhost/") };
+  const html = createHtmlFactory(instance, ctx);
+  const result = getContent(instance.render({ html, ...ctx }));
+
+  assertEquals(result.includes(".catch"), true);
+});
+
+Deno.test("DEBUG - async detection", () => {
+  class Async {
+    getTodos() {
+      return fetch("/api/todos").then((r) => r.json());
+    }
+    render({ html }: any) {
+      return html`<div>${
+        this.getTodos()
+          .then((todos) => html`<ul>${todos}</ul>`)
+          .catch((err) => html`<span>Error</span>`)
+      }</div>`;
+    }
+  }
+
+  const analysis = analyzeRender(Async.prototype.render);
+  console.log("ANALYSIS:", JSON.stringify(analysis, null, 2));
 });
